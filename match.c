@@ -314,14 +314,12 @@ _cmndlist_matches(list)
     struct member_list *list;
 {
     struct member *m;
-    int rval, matched = UNSPEC;
+    int matched = UNSPEC;
 
     tq_foreach_rev(list, m) {
-	rval = cmnd_matches(m);
-	if (rval != UNSPEC) {
-	    matched = m->negated ? !rval : rval;
+	matched = cmnd_matches(m);
+	if (matched != UNSPEC)
 	    break;
-	}
     }
     return(matched);
 }
@@ -377,7 +375,7 @@ command_matches(sudoers_cmnd, sudoers_args)
     char *sudoers_args;
 {
     /* Check for pseudo-commands */
-    if (strchr(user_cmnd, '/') == NULL) {
+    if (sudoers_cmnd[0] != '/') {
 	/*
 	 * Return true if both sudoers_cmnd and user_cmnd are "sudoedit" AND
 	 *  a) there are no args in sudoers OR
@@ -576,8 +574,10 @@ command_matches_dir(sudoers_dir, dlen)
     if (dirp == NULL)
 	return(FALSE);
 
-    if (strlcpy(buf, sudoers_dir, sizeof(buf)) >= sizeof(buf))
+    if (strlcpy(buf, sudoers_dir, sizeof(buf)) >= sizeof(buf)) {
+	closedir(dirp);
 	return(FALSE);
+    }
     while ((dent = readdir(dirp)) != NULL) {
 	/* ignore paths > PATH_MAX (XXX - log) */
 	buf[dlen] = '\0';
