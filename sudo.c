@@ -104,10 +104,6 @@
 # include "nonunix.h"
 #endif
 
-#ifndef lint
-__unused static const char rcsid[] = "$Sudo$";
-#endif /* lint */
-
 /*
  * Prototypes
  */

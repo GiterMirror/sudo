@@ -1416,10 +1416,6 @@ char *yytext;
 #include "parse.h"
 #include <gram.h>
 
-#ifndef lint
-__unused static const char rcsid[] = "$Sudo$";
-#endif /* lint */
-
 extern YYSTYPE yylval;
 int sudolineno = 1;
 char *sudoers;
