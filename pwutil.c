@@ -52,10 +52,6 @@
 #include "sudo.h"
 #include "redblack.h"
 
-#ifndef lint
-__unused static const char rcsid[] = "$Sudo$";
-#endif /* lint */
-
 #ifdef MYPW
 extern void (*my_setgrent) __P((void));
 extern void (*my_endgrent) __P((void));
