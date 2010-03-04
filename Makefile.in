@@ -403,9 +403,6 @@ sudoers.ldap.cat: sudoers.ldap.man
 @DEV@LICENSE: license.pod
 @DEV@	pod2text -l -i0 $> | sed '1,2d' > $@
 
-ChangeLog:
-	cvs2cl --follow-only trunk
-
 install: install-dirs install-binaries @INSTALL_NOEXEC@ install-sudoers install-man
 
 install-dirs:
@@ -529,5 +526,3 @@ depot:
 	  gzip -f --best sudo-$(VERSION).depot; \
 	  rm -rf tmp.depot ; \
 	)
-
-.PHONY:	ChangeLog
