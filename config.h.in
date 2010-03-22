@@ -25,6 +25,9 @@
 /* Define to 1 if using `alloca.c'. */
 #undef C_ALLOCA
 
+/* The name of the sudoers plugin, including extension. */
+#undef SUDOERS_PLUGIN
+
 /* Define to 1 if you want sudo to display "command not allowed" instead of
    "command not found" when a command cannot be found. */
 #undef DONT_LEAK_PATH_INFO
@@ -84,6 +87,15 @@
 
 /* Define to 1 if your `DIR' contains dd_fd. */
 #undef HAVE_DD_FD
+
+/* Define to 1 if you have the 'sys_siglist' declaration. */
+#undef HAVE_DECL_SYS_SIGLIST
+
+/* Define to 1 if you have the '_sys_siglist' declaration. */
+#undef HAVE_DECL__SYS_SIGLIST
+
+/* Define to 1 if you have the '__sys_siglist' declaration. */
+#undef HAVE_DECL___SYS_SIGLIST
 
 /* Define to 1 if you have the `dgettext' function. */
 #undef HAVE_DGETTEXT
@@ -152,6 +164,12 @@
 
 /* Define to 1 if you have the `getgroups' function. */
 #undef HAVE_GETGROUPS
+
+/* Define to 1 if you have the `getgrset' function. */
+#undef HAVE_GETGRSET
+
+/* Define to 1 if you have the `getgrouplist' function. */
+#undef HAVE_GETGROUPLIST
 
 /* Define to 1 if you have the `getifaddrs' function. */
 #undef HAVE_GETIFADDRS
@@ -447,6 +465,12 @@
 /* Define to 1 if you have the `strchr' function. */
 #undef HAVE_STRCHR
 
+/* Define to 1 if you have the `strdup' function. */
+#undef HAVE_STRDUP
+
+/* Define to 1 if you have the `strndup' function. */
+#undef HAVE_STRNDUP
+
 /* Define to 1 if you have the `strerror' function. */
 #undef HAVE_STRERROR
 
@@ -499,9 +523,6 @@
 
 /* Define to 1 if you have the <sys/select.h> header file. */
 #undef HAVE_SYS_SELECT_H
-
-/* Define to 1 if you have the 'sys_siglist' symbol in libc. */
-#undef HAVE_SYS_SIGLIST
 
 /* Define to 1 if you have the <sys/sockio.h> header file. */
 #undef HAVE_SYS_SOCKIO_H
