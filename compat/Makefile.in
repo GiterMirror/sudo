@@ -1,0 +1,118 @@
+#
+# Copyright (c) 2010 Todd C. Miller <Todd.Miller@courtesan.com>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# @configure_input@
+#
+
+#### Start of system configuration section. ####
+
+srcdir = @srcdir@
+devdir = @devdir@
+top_builddir = @top_builddir@
+top_srcdir = @top_srcdir@
+incdir = $(top_srcdir)/include
+compat = $(top_srcdir)/compat
+
+# Compiler & tools to use
+CC = @CC@
+LIBTOOL = @LIBTOOL@
+AR=@AR@
+SED=@SED@
+RANLIB=@RANLIB@
+
+# C preprocessor flags
+CPPFLAGS = -I. -I$(top_srcdir) -I$(incdir) @CPPFLAGS@
+
+# Usually -O and/or -g
+CFLAGS = @CFLAGS@
+
+# Pass in paths and uid/gid + OS dependent defined
+DEFS = @OSDEFS@
+
+#### End of system configuration section. ####
+
+SHELL = /bin/sh
+
+LIBOBJDIR = $(top_srcdir)/@ac_config_libobj_dir@/
+
+LTLIBOBJS = @LTLIBOBJS@
+
+all: libreplace.la
+
+.SUFFIXES: .o .c .h .lo
+
+.c.lo:
+	$(LIBTOOL) --mode=compile $(CC) -c -o $@ $(CPPFLAGS) $(CFLAGS) $(DEFS) $<
+
+libreplace.la: $(LTLIBOBJS)
+	$(LIBTOOL) --mode=link $(CC) -o $@ $(LTLIBOBJS) -no-install
+
+siglist.c: mksiglist
+	./mksiglist > $@
+
+mksiglist: $(srcdir)/mksiglist.c $(srcdir)/mksiglist.h $(incdir)/compat.h $(top_builddir)/config.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEFS) $(srcdir)/mksiglist.c -o $@
+
+@DEV@$(srcdir)/mksiglist.h: $(srcdir)/siglist.in
+@DEV@	awk 'BEGIN {print "/* public domain */\n"} /^    [A-Z]/ {printf("#ifdef SIG%s\n    if (my_sys_siglist[SIG%s] == NULL)\n\tmy_sys_siglist[SIG%s] = \"%s\";\n#endif\n", $1, $1, $1, substr($0, 13))}' < $(srcdir)/siglist.in > $@
+
+$(LIBOBJDIR)siglist.lo: siglist.c $(incdir)/compat.h $(top_builddir)/config.h
+
+# Dependencies
+$(LIBOBJDIR)closefrom.lo: $(compat)/closefrom.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)fnmatch.lo: $(compat)/fnmatch.c $(compat)/fnmatch.h $(compat)/charclass.h $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)getcwd.lo: $(compat)/getcwd.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)getline.lo: $(compat)/getline.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)getprogname.lo: $(compat)/getprogname.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)glob.lo: $(compat)/glob.c $(compat)/glob.h $(compat)/charclass.h $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)isblank.lo: $(compat)/isblank.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)memrchr.lo: $(compat)/memrchr.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)mkstemp.lo: $(compat)/mkstemp.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)nanosleep.lo: $(compat)/nanosleep.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)sigaction.lo: $(compat)/sigaction.c $(incdir)/compat.h $(incdir)/compat.h
+$(LIBOBJDIR)snprintf.lo: $(compat)/snprintf.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strcasecmp.lo: $(compat)/strcasecmp.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strdup.lo: $(compat)/strdup.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strndup.lo: $(compat)/strdup.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strerror.lo: $(compat)/strerror.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strlcat.lo: $(compat)/strlcat.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strlcpy.lo: $(compat)/strlcpy.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)strsignal.lo: $(compat)/strsignal.c $(incdir)/compat.h $(top_builddir)/config.h
+$(LIBOBJDIR)utimes.lo: $(compat)/utimes.c $(incdir)/compat.h $(compat)/utime.h $(top_builddir)/config.h
+
+install:
+
+install-binaries:
+
+install-man:
+
+check:
+	@echo nothing to check
+
+clean:
+	-rm -f mksiglist siglist.c *.a *.o *.lo *.la stamp-* core *.core core.*
+
+mostlyclean: clean
+
+distclean: clean
+	-rm -rf Makefile .libs
+
+clobber: distclean
+
+realclean: distclean
+	rm -f TAGS tags
+
+cleandir: realclean
