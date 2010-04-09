@@ -3,7 +3,7 @@ dnl Process this file with GNU autoconf to produce a configure script.
 dnl
 dnl Copyright (c) 1994-1996,1998-2009 Todd C. Miller <Todd.Miller@courtesan.com>
 dnl
-AC_INIT([sudo], [1.7.3b2], [http://www.sudo.ws/bugs/], [sudo])
+AC_INIT([sudo], [1.8.0a1], [http://www.sudo.ws/bugs/], [sudo])
 AC_CONFIG_HEADER(config.h pathnames.h)
 dnl
 dnl This won't work before AC_INIT
@@ -18,12 +18,15 @@ AC_SUBST(CFLAGS)
 AC_SUBST(PROGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LDFLAGS)
-AC_SUBST(SUDO_LDFLAGS)
+AC_SUBST(SUDOERS_LDFLAGS)
+AC_SUBST(SUDOERS_OBJS)
 AC_SUBST(SUDO_OBJS)
 AC_SUBST(LIBS)
 AC_SUBST(SUDO_LIBS)
+AC_SUBST(SUDOERS_LIBS)
 AC_SUBST(NET_LIBS)
 AC_SUBST(AFS_LIBS)
+AC_SUBST(REPLAY_LIBS)
 AC_SUBST(GETGROUPS_LIB)
 AC_SUBST(OSDEFS)
 AC_SUBST(AUTH_OBJS)
@@ -42,16 +45,17 @@ AC_SUBST(mansectform)
 AC_SUBST(mansrcdir)
 AC_SUBST(NOEXECFILE)
 AC_SUBST(NOEXECDIR)
+AC_SUBST(PLUGINDIR)
 AC_SUBST(noexec_file)
 AC_SUBST(INSTALL_NOEXEC)
 AC_SUBST(DONT_LEAK_PATH_INFO)
 AC_SUBST(BSDAUTH_USAGE)
 AC_SUBST(SELINUX_USAGE)
 AC_SUBST(LDAP)
-AC_SUBST(REPLAY)
 AC_SUBST(LOGINCAP_USAGE)
 AC_SUBST(NONUNIX_GROUPS_IMPL)
 AC_SUBST(ZLIB)
+AC_SUBST(ac_config_libobj_dir)
 dnl
 dnl Variables that get substituted in docs (not overridden by environment)
 dnl
@@ -129,7 +133,6 @@ PROGS="sudo visudo"
 : ${SUDOERS_GID='0'}
 DEV="#"
 LDAP="#"
-REPLAY="#"
 BAMAN='.\" '
 LCMAN='.\" '
 SEMAN='.\" '
@@ -160,6 +163,11 @@ fi
 test "$bindir" = '${exec_prefix}/bin' && bindir='$(exec_prefix)/bin'
 test "$sbindir" = '${exec_prefix}/sbin' && sbindir='$(exec_prefix)/sbin'
 test "$sysconfdir" = '${prefix}/etc' -a X"$with_stow" != X"yes" && sysconfdir='/etc'
+
+dnl
+dnl libc replacement functions live in compat
+dnl
+AC_CONFIG_LIBOBJ_DIR(compat)
 
 dnl
 dnl Deprecated --with options (these all warn or generate an error)
@@ -695,6 +703,14 @@ AC_ARG_WITH(timedir, [AS_HELP_STRING([--with-timedir], [path to the sudo timesta
 		;;
 esac])
 
+AC_ARG_WITH(transcript, [AS_HELP_STRING([--with-transcript=DIR], [directory
+to store sudo transcript files in])],
+[case $with_transcript in
+    yes)    ;;
+    no)     AC_MSG_ERROR(["--without-transcript not supported."])
+	    ;;
+esac])
+
 AC_ARG_WITH(sendmail, [AS_HELP_STRING([--with-sendmail], [set path to sendmail])
 AS_HELP_STRING([--without-sendmail], [do not send mail at all])],
 [case $with_sendmail in
@@ -1061,6 +1077,14 @@ if test X"$with_libvas" != X"no"; then
 fi
 ])
 
+with_plugindir="$libexecdir"
+AC_ARG_WITH(plugin_dir, [AS_HELP_STRING([--with-plugin_dir], [set directory to load plugins from])],
+[case $with_plugin_dir in
+    no)		AC_MSG_ERROR(["illegal argument: --without-plugin_dir."])
+		;;
+    *)		;;
+esac])
+
 dnl
 dnl Options for --enable
 dnl
@@ -1219,9 +1243,26 @@ AC_ARG_ENABLE(env_debug,
   esac
 ], AC_MSG_RESULT(no))
 
-dnl we check enable_transcript later
-AC_ARG_ENABLE(transcript,
-[AS_HELP_STRING([--enable-transcript[[=DIR]]], [Enable Sudo's transcript support, storing them in DIR])])
+AC_ARG_ENABLE(zlib,
+[AS_HELP_STRING([--enable-zlib[[=PATH]]], [Whether to enable or disable zlib])],
+[ case "$enableval" in
+    yes)    AC_DEFINE(HAVE_ZLIB)
+	    ZLIB="-lz"
+	    ;;
+    no)	    ;;
+    *)	    AC_DEFINE(HAVE_ZLIB)
+	    CPPFLAGS="${CPPFLAGS} -I${enableval}/include"
+	    SUDO_APPEND_LIBPATH(ZLIB, [$enableval/lib])
+	    ZLIB="${ZLIB} -lz"
+	    ;;
+  esac
+])
+if test X"$enable_zlib" = X""; then
+    AC_CHECK_LIB(z, gzdopen, [
+	AC_DEFINE(HAVE_ZLIB)
+	ZLIB="-lz"
+    ])
+fi
 
 AC_ARG_WITH(selinux, [AS_HELP_STRING([--with-selinux], [enable SELinux support])],
 [case $with_selinux in
@@ -1267,11 +1308,14 @@ AC_PROG_CPP
 AC_CHECK_TOOL(AR, ar, false)
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 
+if test "x$ac_cv_prog_cc_c89" = "xno"; then
+    AC_MSG_ERROR([Sudo version $PACKAGE_VERSION requires an ANSI C compiler to build.])
+fi
+
 dnl
 dnl Libtool magic; enable shared libs and disable static libs
 dnl
 AC_CANONICAL_HOST
-AC_DISABLE_STATIC
 AC_LIBTOOL_DLOPEN
 AC_PROG_LIBTOOL
 
@@ -1282,6 +1326,12 @@ if test "$enable_shared" = "no"; then
     with_noexec=no
 else
     eval _shrext="$shrext_cmds"
+    # Darwin uses .dylib for libraries but .so for modules
+    if test X"$_shrext" = X".dylib"; then
+	_shrext2=".so"
+    else
+	_shrext2="$_shrext"
+    fi
 fi
 AC_MSG_CHECKING(path to sudo_noexec.so)
 AC_ARG_WITH(noexec, [AS_HELP_STRING([--with-noexec[=PATH]], [fully qualified pathname of sudo_noexec.so])],
@@ -1370,7 +1420,7 @@ case "$host" in
     *-*-aix*)
 		# To get all prototypes (so we pass -Wall)
 		OSDEFS="${OSDEFS} -D_XOPEN_EXTENDED_SOURCE -D_ALL_SOURCE"
-		SUDO_LDFLAGS="${SUDO_LDFLAGS} -Wl,-bI:\$(srcdir)/aixcrypt.exp"
+		SUDOERS_LDFLAGS="${SUDOERS_LDFLAGS} -Wl,-bI:\$(srcdir)/aixcrypt.exp"
 		if test X"$with_blibpath" != X"no"; then
 		    AC_MSG_CHECKING([if linker accepts -Wl,-blibpath])
 		    O_LDFLAGS="$LDFLAGS"
@@ -1421,11 +1471,6 @@ case "$host" in
 		: ${mansectsu='1m'}
 		: ${mansectform='4'}
 
-		# HP-UX bundled compiler can't generate shared objects
-		if test "x$ac_cv_prog_cc_c89" = "xno"; then
-		    with_noexec=no
-		fi
-
 		# Use the +DAportable flag if it is supported
 		_CFLAGS="$CFLAGS"
 		CFLAGS="$CFLAGS +DAportable"
@@ -1444,9 +1489,9 @@ case "$host" in
 
 			    # Not sure if setuid binaries are safe in < 9.x
 			    if test -n "$GCC"; then
-				SUDO_LDFLAGS="${SUDO_LDFLAGS} -static"
+				SUDOERS_LDFLAGS="${SUDOERS_LDFLAGS} -static"
 			    else
-				SUDO_LDFLAGS="${SUDO_LDFLAGS} -Wl,-a,archive"
+				SUDOERS_LDFLAGS="${SUDOERS_LDFLAGS} -Wl,-a,archive"
 			    fi
 			;;
 			*-*-hpux9.*)
@@ -1475,7 +1520,7 @@ case "$host" in
 		;;
     *-dec-osf*)
 		# ignore envariables wrt dynamic lib path
-		SUDO_LDFLAGS="${SUDO_LDFLAGS} -Wl,-no_library_replacement"
+		SUDOERS_LDFLAGS="${SUDOERS_LDFLAGS} -Wl,-no_library_replacement"
 
 		: ${CHECKSIA='true'}
 		AC_MSG_CHECKING(whether to disable sia support on Digital UNIX)
@@ -1789,14 +1834,11 @@ AC_HEADER_STDC
 AC_HEADER_DIRENT
 AC_HEADER_TIME
 AC_CHECK_HEADERS(malloc.h paths.h utime.h netgroup.h sys/sockio.h sys/bsdtypes.h sys/select.h sys/stropts.h)
-dnl ultrix termio/termios are broken
-if test "$OS" != "ultrix"; then
-    AC_SYS_POSIX_TERMIOS
-    if test "$ac_cv_sys_posix_termios" = "yes"; then
-	AC_DEFINE(HAVE_TERMIOS_H)
-    else
-	AC_CHECK_HEADERS(termio.h)
-    fi
+AC_SYS_POSIX_TERMIOS
+if test "$ac_cv_sys_posix_termios" = "yes"; then
+    AC_DEFINE(HAVE_TERMIOS_H)
+else
+    AC_CHECK_HEADERS(termio.h, [], [AC_MSG_ERROR([Must have either termios.h or termio.h to build sudo])])
 fi
 if test ${with_logincap-'no'} != "no"; then
     AC_CHECK_HEADERS(login_cap.h, [LOGINCAP_USAGE='[[-c class|-]] '; LCMAN=""
@@ -1846,13 +1888,14 @@ dnl Function checks
 dnl
 AC_FUNC_GETGROUPS
 AC_CHECK_FUNCS(dup2 strchr strrchr memchr memcpy memset sysconf tzset \
-	       strftime setrlimit initgroups getgroups fstat gettimeofday \
+	       strftime setrlimit initgroups fstat gettimeofday \
 	       regcomp setlocale getaddrinfo setsid setenv vhangup \
 	       mbr_check_membership setrlimit64)
 AC_CHECK_FUNCS(getline, [], [
     AC_LIBOBJ(getline)
     AC_CHECK_FUNCS(fgetln)
 ])
+AC_CHECK_FUNCS(getgrset, [], [AC_REPLACE_FUNCS(getgrouplist)])
 
 AC_CHECK_FUNCS(sysctl getutid getutxid, [break])
 
@@ -1902,15 +1945,16 @@ SUDO_FUNC_ISBLANK
 AC_REPLACE_FUNCS(memrchr strerror strcasecmp sigaction strlcpy strlcat)
 AC_CHECK_FUNCS(nanosleep, [], [
     # On Solaris, nanosleep is in librt
-    AC_CHECK_LIB(rt, nanosleep, [LIBS="${LIBS} -lrt"], [AC_LIBOBJ(nanosleep)])
+    AC_CHECK_LIB(rt, nanosleep, [REPLAY_LIBS="${REPLAY_LIBS} -lrt"], [AC_LIBOBJ(nanosleep)])
 ])
 AC_CHECK_FUNCS(closefrom, [], [AC_LIBOBJ(closefrom)
     AC_CHECK_DECL(F_CLOSEM, AC_DEFINE(HAVE_FCNTL_CLOSEM), [],
 	[ #include <limits.h>
 	  #include <fcntl.h> ])
 ])
-AC_CHECK_FUNCS(mkstemp, [], [SUDO_OBJS="${SUDO_OBJS} mkstemp.o"
+AC_CHECK_FUNCS(mkstemp, [], [
     AC_CHECK_FUNCS(random lrand48, [break])
+    AC_LIBOBJ(mkstemp)
 ])
 AC_CHECK_FUNCS(snprintf vsnprintf asprintf vasprintf, , [NEED_SNPRINTF=1])
 if test X"$ac_cv_type_struct_timespec" != X"no"; then
@@ -1976,15 +2020,18 @@ dnl
 dnl Check for strsignal() or sys_siglist
 dnl
 AC_CHECK_FUNCS(strsignal, [], [
-    AC_MSG_CHECKING([for sys_siglist])
-    AC_CACHE_VAL(sudo_cv_sys_siglist, [
-    AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[extern char *sys_siglist; char *hup = sys_siglist[1];]])], [sudo_cv_sys_siglist=yes], [sudo_cv_sys_siglist=no])])
-    if test "$sudo_cv_sys_siglist" = "yes"; then
-	AC_LIBOBJ(strsignal)
-	AC_DEFINE(HAVE_SYS_SIGLIST)
-	AC_DEFINE(HAVE_STRSIGNAL)
+    AC_LIBOBJ(strsignal)
+    HAVE_SIGLIST="false"
+    AC_CHECK_DECLS([sys_siglist, _sys_siglist, __sys_siglist], [
+	HAVE_SIGLIST="true"
+	break
+    ], [ ], [
+AC_INCLUDES_DEFAULT
+#include <signal.h>
+    ])
+    if test "$HAVE_SIGLIST" != "true"; then
+	AC_LIBOBJ(siglist)
     fi
-    AC_MSG_RESULT($sudo_cv_sys_siglist)
 ])
 
 dnl
@@ -2038,7 +2085,7 @@ if test ${with_pam-"no"} != "no"; then
     AC_CHECK_HEADERS([security/pam_appl.h] [pam/pam_appl.h], [with_pam=yes; break])
     if test "$with_pam" = "yes"; then
 	AC_DEFINE(HAVE_PAM)
-	AUTH_OBJS="$AUTH_OBJS pam.o";
+	AUTH_OBJS="$AUTH_OBJS pam.lo";
 	AUTH_EXCL=PAM
 	AC_MSG_CHECKING(whether to use PAM session support)
 	AC_ARG_ENABLE(pam_session,
@@ -2047,7 +2094,7 @@ if test ${with_pam-"no"} != "no"; then
 		yes)	AC_MSG_RESULT(yes)
 			;;
 		no)		AC_MSG_RESULT(no)
-			    AC_DEFINE([NO_PAM_SESSION], [], [PAM session support disabled])
+			    AC_DEFINE(NO_PAM_SESSION)
 			    ;;
 		*)		AC_MSG_RESULT(no)
 			    AC_MSG_WARN([Ignoring unknown argument to --enable-pam-session: $enableval])
@@ -2076,7 +2123,7 @@ if test ${with_aixauth-'no'} != "no"; then
     if test X"$with_aixauth" != X"maybe" -o X"$AUTH_EXCL" = X""; then
 	AC_MSG_NOTICE([using AIX general authentication])
 	AC_DEFINE(HAVE_AIXAUTH)
-	AUTH_OBJS="$AUTH_OBJS aix_auth.o";
+	AUTH_OBJS="$AUTH_OBJS aix_auth.lo";
 	SUDO_LIBS="${SUDO_LIBS} -ls"
 	AUTH_EXCL=AIX_AUTH
     fi
@@ -2088,7 +2135,7 @@ dnl If set to "maybe" only enable if no other exclusive method in use.
 dnl
 if test ${with_bsdauth-'no'} != "no"; then
     AC_CHECK_HEADER(bsd_auth.h, AC_DEFINE(HAVE_BSD_AUTH_H)
-	[AUTH_OBJS="$AUTH_OBJS bsdauth.o"]
+	[AUTH_OBJS="$AUTH_OBJS bsdauth.lo"]
 	[BSDAUTH_USAGE='[[-a auth_type]] ']
 	[AUTH_EXCL=BSD_AUTH; BAMAN=""],
 	[AC_MSG_ERROR([BSD authentication was specified but bsd_auth.h could not be found])])
@@ -2101,7 +2148,7 @@ if test ${CHECKSIA-'false'} = "true"; then
     AC_CHECK_FUNCS(sia_ses_init, [found=true], [found=false])
     if test "$found" = "true"; then
 	AUTH_EXCL=SIA
-	AUTH_OBJS="$AUTH_OBJS sia.o"
+	AUTH_OBJS="$AUTH_OBJS sia.lo"
     fi
 fi
 
@@ -2110,12 +2157,12 @@ dnl extra FWTK libs + includes
 dnl
 if test ${with_fwtk-'no'} != "no"; then
     if test "$with_fwtk" != "yes"; then
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_fwtk}])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_fwtk}])
 	CPPFLAGS="${CPPFLAGS} -I${with_fwtk}"
 	with_fwtk=yes
     fi
     SUDO_LIBS="${SUDO_LIBS} -lauth -lfwall"
-    AUTH_OBJS="$AUTH_OBJS fwtk.o"
+    AUTH_OBJS="$AUTH_OBJS fwtk.lo"
 fi
 
 dnl
@@ -2137,13 +2184,13 @@ if test ${with_SecurID-'no'} != "no"; then
     #
     AC_CHECK_LIB(aceclnt, SD_Init,
 	[
-	    AUTH_OBJS="$AUTH_OBJS securid5.o";
+	    AUTH_OBJS="$AUTH_OBJS securid5.lo";
 	    SUDO_LIBS="${SUDO_LIBS} -laceclnt -lpthread"
 	]
 	[
-	    SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_SecurID}])
+	    SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_SecurID}])
 	], [
-	    AUTH_OBJS="$AUTH_OBJS securid.o";
+	    AUTH_OBJS="$AUTH_OBJS securid.lo";
 	    SUDO_LIBS="${SUDO_LIBS} ${with_SecurID}/sdiclient.a"
 	],
 	[
@@ -2189,7 +2236,7 @@ if test ${with_kerb4-'no'} != "no"; then
 	test X"$found" = X"no" && CPPFLAGS="$O_CPPFLAGS"
     else
 	SUDO_APPEND_LIBPATH(LDFLAGS, [${with_kerb4}/lib])
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_kerb4}/lib])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_kerb4}/lib])
 	CPPFLAGS="$CPPFLAGS -I${with_kerb4}/include"
 	AC_CHECK_HEADER([krb.h], [found=yes], [found=no])
     fi
@@ -2221,12 +2268,12 @@ if test ${with_kerb4-'no'} != "no"; then
     AC_CHECK_LIB(krb, main, [K4LIBS="-lkrb $K4LIBS"], [
 	AC_CHECK_LIB(krb4, main, [K4LIBS="-lkrb4 $K4LIBS"],
 	    [K4LIBS="-lkrb $K4LIBS"]
-	    [AC_MSG_WARN([Unable to locate Kerberos IV libraries, you will have to edit the Makefile and add -L/path/to/krb/libs to SUDO_LDFLAGS and possibly add Kerberos libs to SUDO_LIBS])]
+	    [AC_MSG_WARN([Unable to locate Kerberos IV libraries, you will have to edit the Makefile and add -L/path/to/krb/libs to SUDOERS_LDFLAGS and possibly add Kerberos libs to SUDO_LIBS])]
 	, [$K4LIBS])
     ], [$K4LIBS])
     LDFLAGS="$O_LDFLAGS"
     SUDO_LIBS="${SUDO_LIBS} $K4LIBS"
-    AUTH_OBJS="$AUTH_OBJS kerb4.o"
+    AUTH_OBJS="$AUTH_OBJS kerb4.lo"
 fi
 
 dnl
@@ -2237,7 +2284,7 @@ if test ${with_kerb5-'no'} != "no"; then
     AC_CHECK_PROG(KRB5CONFIG, krb5-config, yes, "")
     if test -n "$KRB5CONFIG"; then
 	AC_DEFINE(HAVE_KERB5)
-	AUTH_OBJS="$AUTH_OBJS kerb5.o"
+	AUTH_OBJS="$AUTH_OBJS kerb5.lo"
 	CPPFLAGS="$CPPFLAGS `krb5-config --cflags`"
 	SUDO_LIBS="$SUDO_LIBS `krb5-config --libs`"
 	dnl
@@ -2271,7 +2318,7 @@ if test ${with_kerb5-'no'} != "no" -a -z "$KRB5CONFIG"; then
 	fi
     else
 	dnl XXX - try to include krb5.h here too
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_kerb5}/lib])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_kerb5}/lib])
 	CPPFLAGS="$CPPFLAGS -I${with_kerb5}/include"
     fi
 
@@ -2290,7 +2337,7 @@ if test ${with_kerb5-'no'} != "no" -a -z "$KRB5CONFIG"; then
 	    SUDO_LIBS="${SUDO_LIBS} -lkrb5 -lk5crypto -lcom_err"
 	    AC_CHECK_LIB(krb5support, main, [SUDO_LIBS="${SUDO_LIBS} -lkrb5support"])
     ])
-    AUTH_OBJS="$AUTH_OBJS kerb5.o"
+    AUTH_OBJS="$AUTH_OBJS kerb5.lo"
     _LIBS="$LIBS"
     LIBS="${LIBS} ${SUDO_LIBS}"
     AC_CHECK_FUNCS(krb5_verify_user krb5_init_secure_context)
@@ -2320,12 +2367,12 @@ if test ${with_AFS-'no'} = "yes"; then
     AFSLIBDIRS="/usr/lib/afs /usr/afsws/lib /usr/afsws/lib/afs"
     for i in $AFSLIBDIRS; do
 	if test -d ${i}; then
-	    SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [$i])
+	    SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [$i])
 	    FOUND_AFSLIBDIR=true
 	fi
     done
     if test -z "$FOUND_AFSLIBDIR"; then
-	AC_MSG_WARN([Unable to locate AFS libraries, you will have to edit the Makefile and add -L/path/to/afs/libs to SUDO_LDFLAGS or rerun configure with the --with-libpath options.])
+	AC_MSG_WARN([Unable to locate AFS libraries, you will have to edit the Makefile and add -L/path/to/afs/libs to SUDOERS_LDFLAGS or rerun configure with the --with-libpath options.])
     fi
 
     # Order is important here.  Note that we build AFS_LIBS from right to left
@@ -2355,7 +2402,7 @@ if test ${with_AFS-'no'} = "yes"; then
 	AC_MSG_WARN([Unable to locate AFS include dir, you may have to edit the Makefile and add -I/path/to/afs/includes to CPPFLAGS or rerun configure with the --with-incpath options.])
     fi
 
-    AUTH_OBJS="$AUTH_OBJS afs.o"
+    AUTH_OBJS="$AUTH_OBJS afs.lo"
 fi
 
 dnl
@@ -2365,7 +2412,7 @@ dnl
 if test ${with_DCE-'no'} = "yes"; then
     DCE_OBJS="${DCE_OBJS} dce_pwent.o"
     SUDO_LIBS="${SUDO_LIBS} -ldce"
-    AUTH_OBJS="$AUTH_OBJS dce.o"
+    AUTH_OBJS="$AUTH_OBJS dce.lo"
 fi
 
 dnl
@@ -2376,7 +2423,7 @@ if test ${with_skey-'no'} = "yes"; then
     if test "$with_skey" != "yes"; then
 	CPPFLAGS="${CPPFLAGS} -I${with_skey}/include"
 	SUDO_APPEND_LIBPATH(LDFLAGS, [${with_skey}/lib])
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_skey}/lib])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_skey}/lib])
 	AC_PREPROC_IFELSE([#include <skey.h>], [found=yes], [found=no])
     else
 	found=no
@@ -2389,17 +2436,17 @@ if test ${with_skey-'no'} = "yes"; then
 	    CPPFLAGS="$O_CPPFLAGS"
 	else
 	    SUDO_APPEND_LIBPATH(LDFLAGS, [${dir}/lib])
-	    SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${dir}/lib])
+	    SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${dir}/lib])
 	fi
     fi
     if test "$found" = "no"; then
 	AC_MSG_WARN([Unable to locate skey.h, you will have to edit the Makefile and add -I/path/to/skey/includes to CPPFLAGS])
     fi
-    AC_CHECK_LIB(skey, main, [found=yes], [AC_MSG_WARN([Unable to locate libskey.a, you will have to edit the Makefile and add -L/path/to/skey/lib to SUDO_LDFLAGS])])
+    AC_CHECK_LIB(skey, main, [found=yes], [AC_MSG_WARN([Unable to locate libskey.a, you will have to edit the Makefile and add -L/path/to/skey/lib to SUDOERS_LDFLAGS])])
     AC_CHECK_LIB(skey, skeyaccess, AC_DEFINE(HAVE_SKEYACCESS))
     LDFLAGS="$O_LDFLAGS"
     SUDO_LIBS="${SUDO_LIBS} -lskey"
-    AUTH_OBJS="$AUTH_OBJS rfc1938.o"
+    AUTH_OBJS="$AUTH_OBJS rfc1938.lo"
 fi
 
 dnl
@@ -2410,7 +2457,7 @@ if test ${with_opie-'no'} = "yes"; then
     if test "$with_opie" != "yes"; then
 	CPPFLAGS="${CPPFLAGS} -I${with_opie}/include"
 	SUDO_APPEND_LIBPATH(LDFLAGS, [${with_opie}/lib])
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_opie}/lib])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_opie}/lib])
 	AC_PREPROC_IFELSE([#include <opie.h>], [found=yes], [found=no])
     else
 	found=no
@@ -2423,16 +2470,16 @@ if test ${with_opie-'no'} = "yes"; then
 	    CPPFLAGS="$O_CPPFLAGS"
 	else
 	    SUDO_APPEND_LIBPATH(LDFLAGS, [${dir}/lib])
-	    SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${dir}/lib])
+	    SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${dir}/lib])
 	fi
     fi
     if test "$found" = "no"; then
 	AC_MSG_WARN([Unable to locate opie.h, you will have to edit the Makefile and add -I/path/to/opie/includes to CPPFLAGS])
     fi
-    AC_CHECK_LIB(opie, main, [found=yes], [AC_MSG_WARN([Unable to locate libopie.a, you will have to edit the Makefile and add -L/path/to/opie/lib to SUDO_LDFLAGS])])
+    AC_CHECK_LIB(opie, main, [found=yes], [AC_MSG_WARN([Unable to locate libopie.a, you will have to edit the Makefile and add -L/path/to/opie/lib to SUDOERS_LDFLAGS])])
     LDFLAGS="$O_LDFLAGS"
     SUDO_LIBS="${SUDO_LIBS} -lopie"
-    AUTH_OBJS="$AUTH_OBJS rfc1938.o"
+    AUTH_OBJS="$AUTH_OBJS rfc1938.lo"
 fi
 
 dnl
@@ -2480,7 +2527,7 @@ if test ${with_passwd-'no'} != "no"; then
     fi
     if test -n "$SECUREWARE"; then
 	AC_CHECK_FUNCS(bigcrypt set_auth_parameters initprivs)
-	AUTH_OBJS="$AUTH_OBJS secureware.o"
+	AUTH_OBJS="$AUTH_OBJS secureware.lo"
     fi
 fi
 
@@ -2490,12 +2537,12 @@ dnl
 if test ${with_ldap-'no'} != "no"; then
     _LDFLAGS="$LDFLAGS"
     if test "$with_ldap" != "yes"; then
-	SUDO_APPEND_LIBPATH(SUDO_LDFLAGS, [${with_ldap}/lib])
+	SUDO_APPEND_LIBPATH(SUDOERS_LDFLAGS, [${with_ldap}/lib])
 	SUDO_APPEND_LIBPATH(LDFLAGS, [${with_ldap}/lib])
 	CPPFLAGS="${CPPFLAGS} -I${with_ldap}/include"
 	with_ldap=yes
     fi
-    SUDO_OBJS="${SUDO_OBJS} ldap.o"
+    SUDOERS_OBJS="${SUDOERS_OBJS} ldap.lo"
     LDAP=""
 
     AC_MSG_CHECKING([for LDAP libraries])
@@ -2561,7 +2608,7 @@ if test ${with_ldap-'no'} != "no"; then
 	fi
     fi
 
-    SUDO_LIBS="${SUDO_LIBS} ${LDAP_LIBS}"
+    SUDOERS_LIBS="${SUDOERS_LIBS} ${LDAP_LIBS}"
     LIBS="$_LIBS"
     LDFLAGS="$_LDFLAGS"
 fi
@@ -2579,14 +2626,14 @@ if test X"$LIBVAS_RPATH" != X""; then
 fi
 
 dnl
-dnl Add $blibpath to SUDO_LDFLAGS if specified by the user or if we
-dnl added -L dirpaths to SUDO_LDFLAGS.
+dnl Add $blibpath to SUDOERS_LDFLAGS if specified by the user or if we
+dnl added -L dirpaths to SUDOERS_LDFLAGS.
 dnl
 if test -n "$blibpath"; then
     if test -n "$blibpath_add"; then
-    	SUDO_LDFLAGS="$SUDO_LDFLAGS -Wl,-blibpath:${blibpath}${blibpath_add}"
+    	SUDOERS_LDFLAGS="$SUDOERS_LDFLAGS -Wl,-blibpath:${blibpath}${blibpath_add}"
     elif test -n "$with_blibpath" -a "$with_blibpath" != "yes"; then
-    	SUDO_LDFLAGS="$SUDO_LDFLAGS -Wl,-blibpath:${blibpath}"
+    	SUDOERS_LDFLAGS="$SUDOERS_LDFLAGS -Wl,-blibpath:${blibpath}"
     fi
 fi
 
@@ -2598,47 +2645,11 @@ SUDO_TIMEDIR
 SUDO_TRANSCRIPT
 
 dnl
-dnl If transcript is enabled, build sudoreplay and add pty.o script.o for sudo
-dnl
-if test "${enable_transcript-yes}" != "no"; then
-    # currently require POSIX job control for transcript support
-    AC_CHECK_FUNCS(tcsetpgrp, [
-	SUDO_OBJS="${SUDO_OBJS} pty.o script.o"
-	PROGS="$PROGS sudoreplay"
-	REPLAY=""
-
-	AC_ARG_ENABLE(zlib,
-	[AS_HELP_STRING([--enable-zlib[[=PATH]]], [Whether to enable or disable zlib])],
-	[ case "$enableval" in
-	    yes)    AC_DEFINE(HAVE_ZLIB)
-		    ZLIB="-lz"
-		    ;;
-	    no)	    ;;
-	    *)	    AC_DEFINE(HAVE_ZLIB)
-		    CPPFLAGS="${CPPFLAGS} -I${enableval}/include"
-		    SUDO_APPEND_LIBPATH(ZLIB, [$enableval/lib])
-		    ZLIB="${ZLIB} -lz"
-		    ;;
-	  esac
-	])
-	if test X"$enable_zlib" = X""; then
-	    AC_CHECK_LIB(z, gzdopen, [
-		AC_DEFINE(HAVE_ZLIB)
-		ZLIB="-lz"
-	    ])
-	fi
-    ], [
-	AC_MSG_WARN([Disabling transcript support due to lack of tcsetpgrp function])
-	enable_transcript=no
-    ])
-fi
-
-dnl
 dnl Use passwd (and secureware) auth modules?
 dnl
 case "$with_passwd" in
 yes|maybe)
-    AUTH_OBJS="$AUTH_OBJS passwd.o"
+    AUTH_OBJS="$AUTH_OBJS passwd.lo"
     ;;
 *)
     AC_DEFINE(WITHOUT_PASSWD)
@@ -2648,7 +2659,7 @@ yes|maybe)
     ;;
 esac
 AUTH_OBJS=${AUTH_OBJS# }
-_AUTH=`echo "$AUTH_OBJS" | sed 's/\.o//g'`
+_AUTH=`echo "$AUTH_OBJS" | sed 's/\.lo//g'`
 AC_MSG_NOTICE([using the following authentication methods: $_AUTH])
 
 dnl
@@ -2695,13 +2706,17 @@ if test X"$with_noexec" != X"no" -o X"$with_selinux" != X"no"; then
 	eval sesh_file="$libexecdir/sesh"
 	AC_DEFINE_UNQUOTED(_PATH_SUDO_SESH, "$sesh_file", [The fully qualified pathname of sesh])
     fi
+    eval PLUGINDIR="$with_plugindir"
+    SUDO_DEFINE_UNQUOTED(_PATH_SUDO_PLUGIN_DIR, "$PLUGINDIR")
+    SUDO_DEFINE_UNQUOTED(SUDOERS_PLUGIN, "sudoers$_shrext2")
     exec_prefix="$oexec_prefix"
 fi
 
 dnl
 dnl Substitute into the Makefile and man pages
 dnl
-AC_CONFIG_FILES([Makefile sudo.man visudo.man sudoers.man sudoers.ldap.man sudoreplay.man sudo_usage.h])
+dnl AC_CONFIG_FILES([doc/sudo.man doc/visudo.man doc/sudoers.man doc/sudoers.ldap.man doc/sudoreplay.man src/Makefile src/sudo_usage.h])
+AC_CONFIG_FILES([Makefile compat/Makefile doc/Makefile src/sudo_usage.h src/Makefile plugins/sample/Makefile plugins/sudoers/Makefile])
 AC_OUTPUT
 
 dnl
@@ -2721,7 +2736,9 @@ dnl
 AH_TEMPLATE(BROKEN_SYSLOG, [Define to 1 if the `syslog' function returns a non-zero int to denote failure.])
 AH_TEMPLATE(CLASSIC_INSULTS, [Define to 1 if you want the insults from the "classic" version sudo.])
 AH_TEMPLATE(CSOPS_INSULTS, [Define to 1 if you want insults culled from the twisted minds of CSOps.])
+AH_TEMPLATE(SUDOERS_PLUGIN, [The name of the sudoers plugin, including extension.])
 AH_TEMPLATE(DONT_LEAK_PATH_INFO, [Define to 1 if you want sudo to display "command not allowed" instead of "command not found" when a command cannot be found.])
+AH_TEMPLATE(ENV_DEBUG, [Define to 1 to enable environment function debugging.])
 AH_TEMPLATE(ENV_EDITOR, [Define to 1 if you want visudo to honor the EDITOR and VISUAL env variables.])
 AH_TEMPLATE(FQDN, [Define to 1 if you want to require fully qualified hosts in sudoers.])
 AH_TEMPLATE(GOONS_INSULTS, [Define to 1 if you want insults from the "Goon Show".])
@@ -2778,6 +2795,7 @@ AH_TEMPLATE(LOGGING, [Define to SLOG_SYSLOG, SLOG_FILE, or SLOG_BOTH.])
 AH_TEMPLATE(LONG_OTP_PROMPT, [Define to 1 if you want a two line OTP (S/Key or OPIE) prompt.])
 AH_TEMPLATE(NO_AUTHENTICATION, [Define to 1 if you don't want sudo to prompt for a password by default.])
 AH_TEMPLATE(NO_LECTURE, [Define to 1 if you don't want users to get the lecture the first they user sudo.])
+AH_TEMPLATE(NO_PAM_SESSION, [Define to 1 if you don't want to use sudo's PAM session support])
 AH_TEMPLATE(NO_ROOT_MAILER, [Define to avoid runing the mailer as root.])
 AH_TEMPLATE(NO_ROOT_SUDO, [Define to 1 if root should not be allowed to use sudo.])
 AH_TEMPLATE(PC_INSULTS, [Define to 1 to replace politically incorrect insults with less offensive ones.])
