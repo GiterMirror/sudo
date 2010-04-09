@@ -21,8 +21,6 @@
 #
 # @configure_input@
 #
-# $Sudo$
-#
 
 #### Start of system configuration section. ####
 
@@ -153,7 +151,7 @@ DISTFILES = $(SRCS) $(HDRS) ChangeLog HISTORY INSTALL INSTALL.configure \
 	    sudo.man.in sudo.pod sudo.psf sudo_usage.h.in sudoers sudoers.cat \
             sudoers.man.in sudoers.pod sudoers.ldap.cat sudoers.ldap.man.in \
 	    sudoers.ldap.pod sudoers2ldif visudo.cat visudo.man.in visudo.pod \
-	    auth/API
+	    auth/API sudo.man.pl sudoers.man.pl
 
 BINFILES= ChangeLog HISTORY LICENSE README TROUBLESHOOTING \
 	  UPGRADE install-sh mkinstalldirs sample.syslog.conf sample.sudoers \
@@ -405,9 +403,6 @@ sudoers.ldap.cat: sudoers.ldap.man
 @DEV@LICENSE: license.pod
 @DEV@	pod2text -l -i0 $> | sed '1,2d' > $@
 
-ChangeLog:
-	cvs2cl --follow-only trunk
-
 install: install-dirs install-binaries @INSTALL_NOEXEC@ install-sudoers install-man
 
 install-dirs:
@@ -529,5 +524,3 @@ depot:
 	  gzip -f --best sudo-$(VERSION).depot; \
 	  rm -rf tmp.depot ; \
 	)
-
-.PHONY:	ChangeLog
