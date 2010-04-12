@@ -717,7 +717,7 @@ SUDOERS(4)             MAINTENANCE COMMANDS            SUDOERS(4)
 
        passprompt_override
                        The password prompt specified by _p_a_s_s_p_r_o_m_p_t will
-                       normally only be used if the passwod prompt provided by
+                       normally only be used if the password prompt provided by
 
 
 
