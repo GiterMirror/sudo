@@ -1,3 +1,10 @@
+2010-05-28  Todd C. Miller  <Todd.Miller@courtesan.com>
+
+        * env.c: Handle duplicate variables in the environment.
+          For unsetenv(), keep looking even after remove the first instance.
+          For sudo_putenv(), check for and remove dupes after we replace an
+          existing value.
+
 2010-04-09  Todd C. Miller  <Todd.Miller@courtesan.com>
 
         * configure, configure.in: Fix installation of sudoers.ldap
