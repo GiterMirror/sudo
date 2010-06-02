@@ -1,3 +1,21 @@
+2010-06-02  Todd C. Miller  <Todd.Miller@courtesan.com>
+
+	* auth/pam.c: Fix OpenPAM detection for newer versions.
+
+	* vasgroups.c: Sync with Quest sudo git repo
+
+	* aclocal.m4, configure, configure.in: Adapted from Quest sudo.
+	  HP-UX ld uses +b instead of -R or -rpath.
+	  Fix typo in libvas check.
+	  libvas may need libdl for dlopen().
+	  Add missing template for ENV_DEBUG.
+
+	* README.LDAP:
+	  Fix typos; from Quest Sudo
+
+	* Makefile.in, configure.in:
+	  Use value of SHELL from configure in Makefile
+
 2010-05-28  Todd C. Miller  <Todd.Miller@courtesan.com>
 
 	* env.c: Handle duplicate variables in the environment.
