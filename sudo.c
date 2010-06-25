@@ -304,6 +304,9 @@ main(argc, argv, envp)
     if (!update_defaults(SETDEF_RUNAS))
 	log_error(NO_STDERR|NO_EXIT, "problem with defaults entries");
 
+    if (def_fqdn)
+	set_fqdn();	/* deferred until after sudoers is parsed */
+
     /* Set login class if applicable. */
     set_loginclass(sudo_user.pw);
 
@@ -358,11 +361,6 @@ main(argc, argv, envp)
 		break;
 	}
     }
-
-#ifdef USING_NONUNIX_GROUPS
-    /* Finished with the groupcheck code */
-    sudo_nonunix_groupcheck_cleanup();
-#endif
 
     if (safe_cmnd == NULL)
 	safe_cmnd = estrdup(user_cmnd);
@@ -465,6 +463,11 @@ main(argc, argv, envp)
 	/* Cleanup sudoers sources */
 	tq_foreach_fwd(snl, nss)
 	    nss->close(nss);
+
+#ifdef USING_NONUNIX_GROUPS
+	/* Finished with the groupcheck code */
+	sudo_nonunix_groupcheck_cleanup();
+#endif
 
 	/* Deferred exit due to sudo_ldap_close() */
 	if (ISSET(sudo_mode, (MODE_VALIDATE|MODE_CHECK|MODE_LIST)))
@@ -625,22 +628,17 @@ init_vars(sudo_mode, envp)
      * "shost" is the unqualified form of the hostname.
      */
     nohostname = gethostname(thost, sizeof(thost));
-    if (nohostname)
+    if (nohostname) {
 	user_host = user_shost = "localhost";
-    else {
+    } else {
 	thost[sizeof(thost) - 1] = '\0';
 	user_host = estrdup(thost);
-	if (def_fqdn) {
-	    /* Defer call to set_fqdn() until log_error() is safe. */
-	    user_shost = user_host;
+	if ((p = strchr(user_host, '.'))) {
+	    *p = '\0';
+	    user_shost = estrdup(user_host);
+	    *p = '.';
 	} else {
-	    if ((p = strchr(user_host, '.'))) {
-		*p = '\0';
-		user_shost = estrdup(user_host);
-		*p = '.';
-	    } else {
-		user_shost = user_host;
-	    }
+	    user_shost = user_host;
 	}
     }
 
@@ -718,9 +716,6 @@ init_vars(sudo_mode, envp)
     } else
 	user_ngroups = 0;
 #endif
-
-    if (def_fqdn)
-	set_fqdn();			/* may call log_error() */
 
     if (nohostname)
 	log_error(USE_ERRNO|MSG_ONLY, "can't get hostname");
@@ -1444,6 +1439,9 @@ cleanup(gotsignal)
 	    tq_foreach_fwd(snl, nss)
 		nss->close(nss);
 	}
+#ifdef USING_NONUNIX_GROUPS
+	sudo_nonunix_groupcheck_cleanup();
+#endif
 	sudo_endpwent();
 	sudo_endgrent();
     }
