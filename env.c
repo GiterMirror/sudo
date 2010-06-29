@@ -320,7 +320,7 @@ unsetenv(var)
     char **ep;
     size_t len;
 
-    if (strchr(var, '=') != NULL) {
+    if (var == NULL || *var == '\0' || strchr(var, '=') != NULL) {
 	errno = EINVAL;
 #ifdef UNSETENV_VOID
 	return;
