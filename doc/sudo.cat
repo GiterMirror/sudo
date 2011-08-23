@@ -1,7 +1,5 @@
+SUDO(1m)                     MAINTENANCE COMMANDS                     SUDO(1m)
 
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
 
 
 NNAAMMEE
@@ -56,19 +54,6 @@ DDEESSCCRRIIPPTTIIOONN
        Security policies may log successful and failed attempts to use ssuuddoo.
        If an I/O plugin is configured, the running command's input and output
        may be logged as well.
-
-
-
-
-
-1.8.0rc1                February 21, 2011                       1
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
 
 OOPPTTIIOONNSS
        ssuuddoo accepts the following command line options:
@@ -125,22 +110,11 @@ OOPPTTIIOONNSS
                    is already root.  This option is only available on systems
                    with BSD login classes.
 
-
-
-1.8.0rc1                February 21, 2011                       2
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
        -D _l_e_v_e_l    Enable debugging of ssuuddoo plugins and ssuuddoo itself.  The
                    _l_e_v_e_l may be a value from 1 through 9.
 
        -E          The --EE (_p_r_e_s_e_r_v_e _e_n_v_i_r_o_n_m_e_n_t) option indicates to the
-                   security policy that the uses wishes to preserve their
+                   security policy that the user wishes to preserve their
                    existing environment variables.  The security policy may
                    return an error if the --EE option is specified and the user
                    does not have permission to preserve the environment.
@@ -190,18 +164,6 @@ SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
                    behavior.
 
        -h          The --hh (_h_e_l_p) option causes ssuuddoo to print a short help
-
-
-
-1.8.0rc1                February 21, 2011                       3
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
                    message to the standard output and exit.
 
        -i [command]
@@ -215,7 +177,10 @@ SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
                    to change to that user's home directory before running the
                    shell.  The security policy shall initialize the
                    environment to a minimal set of variables, similar to what
-                   is present when a user logs in.
+                   is present when a user logs in.  The _C_o_m_m_a_n_d _E_n_v_i_r_o_n_m_e_n_t
+                   section in the _s_u_d_o_e_r_s(4) manual documents how the --ii
+                   option affects the environment in which a command is run
+                   when the _s_u_d_o_e_r_s policy is in use.
 
        -K          The --KK (sure _k_i_l_l) option is like --kk except that it removes
                    the user's cached credentials entirely and may not be used
@@ -256,18 +221,6 @@ SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
                    messages and exit.
 
        -P          The --PP (_p_r_e_s_e_r_v_e _g_r_o_u_p _v_e_c_t_o_r) option causes ssuuddoo to
-
-
-
-1.8.0rc1                February 21, 2011                       4
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
                    preserve the invoking user's group vector unaltered.  By
                    default, the _s_u_d_o_e_r_s policy will initialize the group
                    vector to the list of groups the target user is in.  The
@@ -322,18 +275,6 @@ SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
                    role.
 
        -U _u_s_e_r     The --UU (_o_t_h_e_r _u_s_e_r) option is used in conjunction with the
-
-
-
-1.8.0rc1                February 21, 2011                       5
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
                    --ll option to specify the user whose privileges should be
                    listed.  The security policy may restrict listing other
                    users' privileges.  The _s_u_d_o_e_r_s policy only allows root or
@@ -384,28 +325,13 @@ PPLLUUGGIINNSS
        security policy and I/O logging, which corresponds to the following
        _/_e_t_c_/_s_u_d_o_._c_o_n_f file.
 
-
-
-
-
-
-
-
-1.8.0rc1                February 21, 2011                       6
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
         #
         # Default /etc/sudo.conf file
         #
         # Format:
         #   Plugin plugin_name plugin_path
-        #   Path askpass path/to/askpass
+        #   Path askpass /path/to/askpass
+        #   Path noexec /path/to/noexec.so
         #
         # The plugin_path is relative to /usr/local/libexec unless
         #   fully qualified.
@@ -425,6 +351,33 @@ SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
        ignored
 
        For more information, see the _s_u_d_o___p_l_u_g_i_n(1m) manual.
+
+PPAATTHHSS
+       A Path line consists of the Path keyword, followed by the name of the
+       path to set and its value.  E.g.
+
+        Path noexec /usr/local/libexec/sudo_noexec.so
+        Path askpass /usr/X11R6/bin/ssh-askpass
+
+       The following plugin-agnostic paths may be set in the _/_e_t_c_/_s_u_d_o_._c_o_n_f
+       file.
+
+       askpass         The fully qualified path to a helper program used to
+                       read the user's password when no terminal is available.
+                       This may be the case when ssuuddoo is executed from a
+                       graphical (as opposed to text-based) application.  The
+                       program specified by _a_s_k_p_a_s_s should display the
+                       argument passed to it as the prompt and write the
+                       user's password to the standard output.  The value of
+                       _a_s_k_p_a_s_s may be overridden by the SUDO_ASKPASS
+                       environment variable.
+
+       noexec          The fully-qualified path to a shared library containing
+                       dummy versions of the _e_x_e_c_v_(_), _e_x_e_c_v_e_(_) and _f_e_x_e_c_v_e_(_)
+                       library functions that just return an error.  This is
+                       used to implement the _n_o_e_x_e_c functionality on systems
+                       that support LD_PRELOAD or its equivalent.  Defaults to
+                       _/_u_s_r_/_l_o_c_a_l_/_l_i_b_e_x_e_c_/_s_u_d_o___n_o_e_x_e_c_._s_o.
 
 RREETTUURRNN VVAALLUUEESS
        Upon successful execution of a program, the exit status from ssuuddoo will
@@ -454,18 +407,6 @@ SSEECCUURRIITTYY NNOOTTEESS
        runs.  If a user runs a command such as sudo su or sudo sh, subsequent
        commands run from that shell are not subject to ssuuddoo's security policy.
        The same is true for commands that offer shell escapes (including most
-
-
-
-1.8.0rc1                February 21, 2011                       7
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
        editors).  If I/O logging is enabled, subsequent commands will have
        their input and/or output logged, but there will not be traditional
        logs for those commands.  Because of this, care must be taken when
@@ -521,17 +462,6 @@ EENNVVIIRROONNMMEENNTT
 FFIILLEESS
        _/_e_t_c_/_s_u_d_o_._c_o_n_f          ssuuddoo plugin and path configuration
 
-
-
-1.8.0rc1                February 21, 2011                       8
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
 EEXXAAMMPPLLEESS
        Note: the following examples assume a properly configured security
        policy.
@@ -586,18 +516,6 @@ CCAAVVEEAATTSS
        programs (such as editors) allow the user to run commands via shell
        escapes, thus avoiding ssuuddoo's checks.  However, on most systems it is
        possible to prevent shell escapes with the _s_u_d_o_e_r_s(4) module's _n_o_e_x_e_c
-
-
-
-1.8.0rc1                February 21, 2011                       9
-
-
-
-
-
-SUDO(1m)               MAINTENANCE COMMANDS              SUDO(1m)
-
-
        functionality.
 
        It is not meaningful to run the cd command directly via sudo, e.g.,
@@ -629,32 +547,4 @@ DDIISSCCLLAAIIMMEERR
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-1.8.0rc1                February 21, 2011                      10
-
-
+1.8.2                           August 17, 2011                       SUDO(1m)
