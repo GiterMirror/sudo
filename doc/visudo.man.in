@@ -1,4 +1,4 @@
-.\" Copyright (c) 1996,1998-2005, 2007-2008
+.\" Copyright (c) 1996,1998-2005, 2007-2011
 .\" 	Todd C. Miller <Todd.Miller@courtesan.com>
 .\" 
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -144,7 +144,7 @@
 .\" ========================================================================
 .\"
 .IX Title "VISUDO @mansectsu@"
-.TH VISUDO @mansectsu@ "February 21, 2011" "1.8.0rc1" "MAINTENANCE COMMANDS"
+.TH VISUDO @mansectsu@ "September 16, 2011" "1.8.3" "MAINTENANCE COMMANDS"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -271,6 +271,12 @@ complain).  In \fB\-s\fR (strict) mode these are errors, not warnings.
 The specified {User,Runas,Host,Cmnd}_Alias was defined but never
 used.  You may wish to comment out or remove the unused alias.  In
 \&\fB\-s\fR (strict) mode this is an error, not a warning.
+.IP "Warning: cycle in {User,Runas,Host,Cmnd}_Alias" 4
+.IX Item "Warning: cycle in {User,Runas,Host,Cmnd}_Alias"
+The specified {User,Runas,Host,Cmnd}_Alias includes a reference to
+itself, either directly or through an alias it includes.  This is
+only a warning by default as \fBsudo\fR will ignore cycles when parsing
+the \fIsudoers\fR file.
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
 \&\fIvi\fR\|(1), \fIsudoers\fR\|(@mansectform@), \fIsudo\fR\|(@mansectsu@), \fIvipw\fR\|(@mansectsu@)
